@@ -22,6 +22,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-batch'
     annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
     implementation 'com.h2database:h2'
+//    implementation 'mysql:mysql-connector-java'
+    runtimeOnly group: 'com.mysql', name: 'mysql-connector-j' // runtimeOnly: 실행 시점에만 필요할 때
 
 
     compileOnly 'org.projectlombok:lombok:1.18.2'
