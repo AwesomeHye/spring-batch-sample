@@ -21,8 +21,8 @@ public class SpringBatchManunalRunner implements ApplicationRunner {
     public void run(ApplicationArguments args) throws Exception {
         JobParameters jobParamters = new JobParametersBuilder()
             .addString("name", "hyein")
-            .addLong("seq", 4L)
-//            .addDate("date", new Date())
+            .addLong("seq", 6L)
+            .addDate("date", new Date())
             .addDouble("weight", 16.5)
             .toJobParameters();
 

@@ -3,6 +3,7 @@ package dev.hyein.springbatchsample.lecture;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecutionListener;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
@@ -24,6 +25,7 @@ public class HelloJobConfiguration {
     private final Step3Tasklet step3Tasklet;
     private final Step4Tasklet step4Tasklet;
     private final Step5Tasklet step5Tasklet;
+    private final JobExecutionListener jobExecutionListener;
 
     @Bean
     public Job helloJob() {
@@ -33,6 +35,7 @@ public class HelloJobConfiguration {
             .next(step3())
             .next(step4())
             .next(step5())
+            .listener(jobExecutionListener)
             .build();
     }
 
