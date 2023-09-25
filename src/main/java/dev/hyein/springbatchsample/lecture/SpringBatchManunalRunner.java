@@ -14,8 +14,8 @@ import java.util.Date;
 @Component
 @RequiredArgsConstructor
 public class SpringBatchManunalRunner implements ApplicationRunner {
-    private final JobLauncher jobLauncher;
-    private final Job job;
+//    private final JobLauncher jobLauncher;
+//    private final Job job;
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
