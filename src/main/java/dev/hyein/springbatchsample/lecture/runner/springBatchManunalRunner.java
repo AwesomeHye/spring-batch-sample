@@ -19,7 +19,7 @@ public class springBatchManunalRunner implements ApplicationRunner {
     private final JobLauncher jobLauncher;
     private final Job job;
 
-    public springBatchManunalRunner(JobLauncher jobLauncher, @Qualifier("validatorJob") Job job) {
+    public springBatchManunalRunner(JobLauncher jobLauncher,  Job job) {
         this.jobLauncher = jobLauncher;
         this.job = job;
     }
@@ -29,8 +29,8 @@ public class springBatchManunalRunner implements ApplicationRunner {
         log.info("RUN BY springBatchManunalRunner");
         JobParameters jobParamters = new JobParametersBuilder()
             .addString("name", "hyein")
-            .addLong("seq", 6L)
-            .addDate("date", new Date())
+            .addLong("seq", 7L)
+//            .addDate("date", new Date())
             .addDouble("weight", 16.5)
             .toJobParameters();
 

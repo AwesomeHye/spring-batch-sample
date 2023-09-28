@@ -42,6 +42,7 @@ public class HelloJobConfiguration {
             .next(step4())
             .next(step5())
             .listener(jobExecutionListener)
+            .preventRestart()
             .build();
     }
 
