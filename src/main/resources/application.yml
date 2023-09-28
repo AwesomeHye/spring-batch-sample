@@ -32,5 +32,6 @@ spring:
     jdbc:
       initialize-schema: never
     job:
-#      enabled: false
-      names: ${job.name:NONE} #helloJob
+      enabled: false
+      names: ${job.name:validatorJob}
+#      names: ${job.name:NONE} #helloJob

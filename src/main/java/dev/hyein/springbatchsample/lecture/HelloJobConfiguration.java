@@ -1,5 +1,6 @@
 package dev.hyein.springbatchsample.lecture;
 
+import dev.hyein.springbatchsample.lecture.validator.CustomJobParameterValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
@@ -9,11 +10,13 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.job.DefaultJobParametersValidator;
 import org.springframework.batch.core.job.builder.FlowBuilder;
 import org.springframework.batch.core.job.flow.Flow;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 import java.util.Map;
 
@@ -29,17 +32,18 @@ public class HelloJobConfiguration {
     private final Step5Tasklet step5Tasklet;
     private final JobExecutionListener jobExecutionListener;
 
-//    @Bean
-//    public Job helloJob() {
-//        return jobBuilderFactory.get("helloJob")
-//            .start(step1())
-//            .next(step2())
-//            .next(step3())
-//            .next(step4())
-//            .next(step5())
-//            .listener(jobExecutionListener)
-//            .build();
-//    }
+    @Primary
+    @Bean
+    public Job helloJob() {
+        return jobBuilderFactory.get("helloJob")
+            .start(step1())
+            .next(step2())
+            .next(step3())
+            .next(step4())
+            .next(step5())
+            .listener(jobExecutionListener)
+            .build();
+    }
 
     @Bean
     public Job helloJob2() {
@@ -47,6 +51,16 @@ public class HelloJobConfiguration {
             .start(flow())
             .next(step2())
             .end()
+            .build();
+    }
+
+    @Bean("validatorJob")
+    public Job validatorJob() {
+        return jobBuilderFactory.get("validatorJob")
+            .start(step1())
+            .next(step2())
+            .validator(new DefaultJobParametersValidator(new String[]{"seq"}, new String[]{"name"}))
+//            .validator(new CustomJobParameterValidator())
             .build();
     }
 
