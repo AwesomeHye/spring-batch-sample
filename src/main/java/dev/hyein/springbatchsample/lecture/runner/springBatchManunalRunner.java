@@ -29,11 +29,11 @@ public class springBatchManunalRunner implements ApplicationRunner {
         log.info("RUN BY springBatchManunalRunner");
         JobParameters jobParamters = new JobParametersBuilder()
             .addString("name", "hyein")
-            .addLong("seq", 7L)
+            .addLong("seq", 9L)
 //            .addDate("date", new Date())
             .addDouble("weight", 16.5)
             .toJobParameters();
 
-        jobLauncher.run(job, jobParamters);
+//        jobLauncher.run(job, jobParamters);
     }
 }

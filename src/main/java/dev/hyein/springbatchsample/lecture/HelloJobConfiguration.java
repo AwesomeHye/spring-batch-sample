@@ -1,5 +1,6 @@
 package dev.hyein.springbatchsample.lecture;
 
+import dev.hyein.springbatchsample.lecture.incrementer.CustomJobParametersIncrementer;
 import dev.hyein.springbatchsample.lecture.validator.CustomJobParameterValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +14,7 @@ import org.springframework.batch.core.configuration.annotation.StepBuilderFactor
 import org.springframework.batch.core.job.DefaultJobParametersValidator;
 import org.springframework.batch.core.job.builder.FlowBuilder;
 import org.springframework.batch.core.job.flow.Flow;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,7 +44,9 @@ public class HelloJobConfiguration {
             .next(step4())
             .next(step5())
             .listener(jobExecutionListener)
-            .preventRestart()
+//            .preventRestart()
+            .incrementer(new RunIdIncrementer())
+//            .incrementer(new CustomJobParametersIncrementer())
             .build();
     }
 
