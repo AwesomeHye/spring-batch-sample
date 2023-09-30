@@ -1,4 +1,4 @@
-package dev.hyein.springbatchsample.lecture;
+package dev.hyein.springbatchsample.lecture.tasklet;
 
 import org.springframework.batch.core.StepContribution;
 import org.springframework.batch.core.scope.context.ChunkContext;

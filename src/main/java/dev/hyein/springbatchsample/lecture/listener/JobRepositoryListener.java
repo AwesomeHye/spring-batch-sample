@@ -1,4 +1,4 @@
-package dev.hyein.springbatchsample.lecture;
+package dev.hyein.springbatchsample.lecture.listener;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

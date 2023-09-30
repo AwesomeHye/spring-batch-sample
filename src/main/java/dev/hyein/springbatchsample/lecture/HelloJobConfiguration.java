@@ -1,7 +1,9 @@
 package dev.hyein.springbatchsample.lecture;
 
-import dev.hyein.springbatchsample.lecture.incrementer.CustomJobParametersIncrementer;
-import dev.hyein.springbatchsample.lecture.validator.CustomJobParameterValidator;
+import dev.hyein.springbatchsample.lecture.tasklet.Step2Tasklet;
+import dev.hyein.springbatchsample.lecture.tasklet.Step3Tasklet;
+import dev.hyein.springbatchsample.lecture.tasklet.Step4Tasklet;
+import dev.hyein.springbatchsample.lecture.tasklet.Step5Tasklet;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.Job;
@@ -15,12 +17,16 @@ import org.springframework.batch.core.job.DefaultJobParametersValidator;
 import org.springframework.batch.core.job.builder.FlowBuilder;
 import org.springframework.batch.core.job.flow.Flow;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 import java.util.Map;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @EnableBatchProcessing
 @Configuration
@@ -110,8 +116,15 @@ public class HelloJobConfiguration {
 
     @Bean
     public Step step5() {
-        return stepBuilderFactory.get("step5")
-            .tasklet(step5Tasklet)
+        return stepBuilderFactory.get("chunkStep5")
+            .<String, String> chunk(3) // 데이터 10개 단위로 자름
+            .reader(new ListItemReader<>(IntStream.rangeClosed(1, 5).boxed().map(Object::toString).collect(Collectors.toList())))
+            .processor((ItemProcessor<? super String, ? extends String>) item -> item + " processed")
+            .writer(items -> {
+                for (String item : items) {
+                    log.info("chunk item: {}", item);
+                }
+            })
             .build();
     }
 
