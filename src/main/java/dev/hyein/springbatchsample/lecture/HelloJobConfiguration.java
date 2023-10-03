@@ -6,17 +6,22 @@ import dev.hyein.springbatchsample.lecture.tasklet.Step4Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step5Tasklet;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobExecutionListener;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.Step;
+import org.springframework.batch.core.StepExecution;
+import org.springframework.batch.core.StepExecutionListener;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.job.DefaultJobParametersValidator;
 import org.springframework.batch.core.job.builder.FlowBuilder;
 import org.springframework.batch.core.job.flow.Flow;
+import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.repeat.RepeatStatus;
@@ -75,6 +80,47 @@ public class HelloJobConfiguration {
             .build();
     }
 
+    @Bean("parentJob")
+    public Job parentJob() {
+        return jobBuilderFactory.get("parentJob")
+            .start(jobStep(null))
+            .next(step2())
+            .build();
+    }
+
+    @Bean
+    public Step jobStep(JobLauncher jobLauncher) {
+        return stepBuilderFactory.get("jobStep")
+            .job(childJob())
+            .launcher(jobLauncher)
+            .parametersExtractor(getJobParametersExtractor())
+            .listener(new StepExecutionListener() {
+                @Override
+                public void beforeStep(StepExecution stepExecution) {
+                    stepExecution.getExecutionContext().put("name", "hyein"); // child job 에서 사용하게 job parameter 넣어줌
+                }
+
+                @Override
+                public ExitStatus afterStep(StepExecution stepExecution) {
+                    return null;
+                }
+            })
+            .build();
+    }
+
+    @Bean
+    public Job childJob() {
+        return jobBuilderFactory.get("childJob")
+            .start(step1())
+            .build();
+    }
+
+    private DefaultJobParametersExtractor getJobParametersExtractor() {
+        DefaultJobParametersExtractor extractor = new DefaultJobParametersExtractor();
+        extractor.setKeys(new String[]{"name"});
+        return extractor;
+    }
+
     @Bean
     public Step step1() {
         return stepBuilderFactory.get("step1")
@@ -111,6 +157,8 @@ public class HelloJobConfiguration {
     public Step step4() {
         return stepBuilderFactory.get("step4")
             .tasklet(step4Tasklet)
+            .startLimit(10)
+            .allowStartIfComplete(true)
             .build();
     }
 
