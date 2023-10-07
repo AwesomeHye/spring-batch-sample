@@ -121,6 +121,25 @@ public class HelloJobConfiguration {
         return extractor;
     }
 
+    @Bean("flowJob")
+    public Job flowJob() {
+        return jobBuilderFactory.get("flowJob")
+            .start(step1())
+            .on("FAILED")
+            .to(step2())
+            .on("FAILED").stop()
+            .from(step1())
+            .on("*")
+            .to(step3())
+            .next(step4())
+            .from(step2())
+            .on("*")
+            .to(step5())
+            .end()
+            .build();
+    }
+
+
     @Bean
     public Step step1() {
         return stepBuilderFactory.get("step1")
@@ -134,6 +153,7 @@ public class HelloJobConfiguration {
                 System.out.println("Step1 executed!");
 
 //                if(1==1) throw new RuntimeException("step1에서 실패");
+                contribution.setExitStatus(ExitStatus.FAILED);
                 return RepeatStatus.FINISHED;
             }))
             .build();
