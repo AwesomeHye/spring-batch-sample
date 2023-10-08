@@ -1,5 +1,7 @@
 package dev.hyein.springbatchsample.lecture;
 
+import dev.hyein.springbatchsample.lecture.decider.CutomDecider;
+import dev.hyein.springbatchsample.lecture.listener.CustomStatusListener;
 import dev.hyein.springbatchsample.lecture.tasklet.Step2Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step3Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step4Tasklet;
@@ -19,6 +21,7 @@ import org.springframework.batch.core.configuration.annotation.StepBuilderFactor
 import org.springframework.batch.core.job.DefaultJobParametersValidator;
 import org.springframework.batch.core.job.builder.FlowBuilder;
 import org.springframework.batch.core.job.flow.Flow;
+import org.springframework.batch.core.job.flow.JobExecutionDecider;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
@@ -127,7 +130,7 @@ public class HelloJobConfiguration {
             .start(step1())
             .on("FAILED")
             .to(step2())
-            .on("FAILED").stop()
+            .on("PASS").stop()
             .from(step1())
             .on("*")
             .to(step3())
@@ -137,6 +140,22 @@ public class HelloJobConfiguration {
             .to(step5())
             .end()
             .build();
+    }
+
+    @Bean("deciderJob")
+    public Job deciderJob() {
+        return jobBuilderFactory.get("deciderJob")
+            .start(step1())
+            .next(decider()) // JobExecutionDecider 선언
+            .from(decider()).on("ODD").to(step2())
+            .from(decider()).on("EVEN").to(step3())
+            .end()
+            .build();
+    }
+
+    @Bean
+    public JobExecutionDecider decider() {
+        return new CutomDecider();
     }
 
 
@@ -153,7 +172,7 @@ public class HelloJobConfiguration {
                 System.out.println("Step1 executed!");
 
 //                if(1==1) throw new RuntimeException("step1에서 실패");
-                contribution.setExitStatus(ExitStatus.FAILED);
+//                contribution.setExitStatus(ExitStatus.FAILED);
                 return RepeatStatus.FINISHED;
             }))
             .build();
@@ -163,6 +182,7 @@ public class HelloJobConfiguration {
     public Step step2() {
         return stepBuilderFactory.get("step2")
             .tasklet(new Step2Tasklet())
+            .listener(new CustomStatusListener())
             .build();
     }
 
