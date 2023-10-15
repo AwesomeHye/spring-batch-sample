@@ -1,7 +1,12 @@
 package dev.hyein.springbatchsample.lecture;
 
+import dev.hyein.springbatchsample.lecture.chunk.CustomItemProcessor;
+import dev.hyein.springbatchsample.lecture.chunk.CustomItemWriter;
+import dev.hyein.springbatchsample.lecture.chunk.Customer;
+import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamReader;
+import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamWriter;
 import dev.hyein.springbatchsample.lecture.decider.CutomDecider;
-import dev.hyein.springbatchsample.lecture.listener.CustomStatusListener;
+import dev.hyein.springbatchsample.lecture.chunk.CustomItemReader;
 import dev.hyein.springbatchsample.lecture.tasklet.Step2Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step3Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step4Tasklet;
@@ -17,7 +22,9 @@ import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.core.StepExecutionListener;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.DefaultJobParametersValidator;
 import org.springframework.batch.core.job.builder.FlowBuilder;
 import org.springframework.batch.core.job.flow.Flow;
@@ -28,10 +35,13 @@ import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -53,7 +63,7 @@ public class HelloJobConfiguration {
     public Job helloJob() {
         return jobBuilderFactory.get("helloJob")
             .start(step1())
-            .next(step2())
+            .next(step2(null))
             .next(step3())
             .next(step4())
             .next(step5())
@@ -68,8 +78,8 @@ public class HelloJobConfiguration {
     public Job helloJob2() {
         return jobBuilderFactory.get("helloJob2")
             .start(flow())
-            .next(step2())
-            .end()
+            .next(step2(null))
+            .end() // simpleJob 이 아닌 FlowJob 으로 실행됨
             .build();
     }
 
@@ -77,7 +87,7 @@ public class HelloJobConfiguration {
     public Job validatorJob() {
         return jobBuilderFactory.get("validatorJob")
             .start(step1())
-            .next(step2())
+            .next(step2(null))
             .validator(new DefaultJobParametersValidator(new String[]{"seq"}, new String[]{"name"}))
 //            .validator(new CustomJobParameterValidator())
             .build();
@@ -87,7 +97,7 @@ public class HelloJobConfiguration {
     public Job parentJob() {
         return jobBuilderFactory.get("parentJob")
             .start(jobStep(null))
-            .next(step2())
+            .next(step2(null))
             .build();
     }
 
@@ -118,6 +128,21 @@ public class HelloJobConfiguration {
             .build();
     }
 
+    @Bean
+    public Job flowStepJob() {
+        return jobBuilderFactory.get("flowStepJob")
+            .start(flowStep())
+            .next(step3())
+            .build();
+    }
+
+    @Bean
+    public Step flowStep() {
+        return stepBuilderFactory.get("flowStep")
+            .flow(flow())
+            .build();
+    }
+
     private DefaultJobParametersExtractor getJobParametersExtractor() {
         DefaultJobParametersExtractor extractor = new DefaultJobParametersExtractor();
         extractor.setKeys(new String[]{"name"});
@@ -129,13 +154,13 @@ public class HelloJobConfiguration {
         return jobBuilderFactory.get("flowJob")
             .start(step1())
             .on("FAILED")
-            .to(step2())
+            .to(step2(null))
             .on("PASS").stop()
             .from(step1())
             .on("*")
             .to(step3())
             .next(step4())
-            .from(step2())
+            .from(step2(null))
             .on("*")
             .to(step5())
             .end()
@@ -147,11 +172,26 @@ public class HelloJobConfiguration {
         return jobBuilderFactory.get("deciderJob")
             .start(step1())
             .next(decider()) // JobExecutionDecider 선언
-            .from(decider()).on("ODD").to(step2())
+            .from(decider()).on("ODD").to(step2(null))
             .from(decider()).on("EVEN").to(step3())
             .end()
             .build();
     }
+
+    @Bean("chunkJob")
+    public Job chunkJob() {
+        return jobBuilderFactory.get("chunkJob")
+            .start(step6())
+            .build();
+    }
+
+    @Bean("chunkJob2")
+    public Job chunkJob2() {
+        return jobBuilderFactory.get("chunkJob2")
+            .start(step7())
+            .build();
+    }
+
 
     @Bean
     public JobExecutionDecider decider() {
@@ -179,11 +219,20 @@ public class HelloJobConfiguration {
     }
 
     @Bean
-    public Step step2() {
+    @JobScope
+    public Step step2(@Value("#{jobParameters['message']}") String message) {
+        log.info("message from jobScope: {}", message);
         return stepBuilderFactory.get("step2")
-            .tasklet(new Step2Tasklet())
-            .listener(new CustomStatusListener())
+            .tasklet(getTasklet2(null))
+//            .listener(new CustomStatusListener())
             .build();
+    }
+
+    @Bean
+    @StepScope
+    public Step2Tasklet getTasklet2(@Value("#{jobParameters['stepMessage']}") String stepMessage) {
+        log.info("message from StepScope: {}", stepMessage);
+        return new Step2Tasklet();
     }
 
     @Bean
@@ -217,12 +266,60 @@ public class HelloJobConfiguration {
     }
 
     @Bean
+    public Step step6() {
+        return stepBuilderFactory.get("chunkStep6")
+            .<Customer, Customer> chunk(3)
+            .reader(itemReader())
+            .processor(itemProcessor())
+            .writer(itemWriter())
+            .build();
+    }
+
+    @Bean
+    public CustomItemReader itemReader() {
+        return new CustomItemReader(new ArrayList<>(Arrays.asList(new Customer("user1"), new Customer("user2"), new Customer("user3"))));
+    }
+
+    @Bean
+    public CustomItemProcessor itemProcessor() {
+        return new CustomItemProcessor();
+    }
+
+    @Bean
+    public CustomItemWriter itemWriter() {
+        return new CustomItemWriter();
+    }
+
+    @Bean
+    public Step step7() {
+        return stepBuilderFactory.get("chunkStep7")
+            .<String, String> chunk(3)
+            .reader(customItemStreamReader())
+            .writer(customItemStreamWriter())
+            .build();
+    }
+
+    @Bean
+    public CustomItemStreamReader customItemStreamReader() {
+        ArrayList<String> items = new ArrayList<>(10);
+        for (int i = 0; i < 10; i++) {
+            items.add(String.valueOf(i));
+        }
+        return new CustomItemStreamReader(items);
+    }
+
+    @Bean
+    public CustomItemStreamWriter customItemStreamWriter() {
+        return new CustomItemStreamWriter();
+    }
+
+    @Bean
     public Flow flow() {
         // flow 잡 안에 flow 가 실행된다.
         FlowBuilder<Flow> flowBuilder = new FlowBuilder<>("flow1");
         return flowBuilder
             .start(step1())
-            .next(step2())
-            .end(); // end 써줘야힘
+            .next(step2(null))
+            .end(); // end 써줘야 Flow 객체 생성됨
     }
 }
