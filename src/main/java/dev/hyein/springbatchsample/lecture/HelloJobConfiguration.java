@@ -37,7 +37,10 @@ import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
+import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
+import org.springframework.batch.item.file.transform.Range;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Value;
@@ -45,6 +48,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.FileSystemResource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -339,7 +343,8 @@ public class HelloJobConfiguration {
     public Step step8() {
         return stepBuilderFactory.get("chunkStep8")
             .<Customer, Customer> chunk(5)
-            .reader(csvItemReader())
+            .reader(csvItemReader(false))
+//            .reader(csvItemReader(true))
             .writer((items) -> {
                 for (Customer item : items) {
                     log.info("Customer: {}", item.toString());
@@ -348,18 +353,47 @@ public class HelloJobConfiguration {
             .build();
     }
 
-    @Bean
-    public ItemReader<Customer> csvItemReader() {
-        FlatFileItemReader<Customer> itemReader = new FlatFileItemReader<>();
-        itemReader.setResource(new ClassPathResource("/customer.csv"));
+    public ItemReader<Customer> csvItemReader(boolean isDelimited) {
+        if(isDelimited) {
+            // 구분자
+            return new FlatFileItemReaderBuilder<Customer>()
+                .name("flatFile") // FlatFileItemReader 이름
+                .resource(new ClassPathResource("/customer.csv")) // 읽을 파일 위치
+                .fieldSetMapper(new BeanWrapperFieldSetMapper<>()) // CustomerFieldSetMapper 도 구현할 필요 없음
+                .targetType(Customer.class) // CustomerFieldSetMapper 도 구현할 필요 없음
+                .linesToSkip(1)
+                .delimited().delimiter(",") // DelimitedLineTokenizer. 구분자 방식 토크나이징
+                .names("name", "age", "year") // 이름으로 fieldSet 접근할 수 있음
+                .build();
+            // DefaultLineMapper 는 구현할 필요 없다. 스프링 배치에서 같은 이름으로 제공.
+        } else {
+            // 고정 길이
+            return new FlatFileItemReaderBuilder<Customer>()
+                .name("flatFile")
+                .resource(new FileSystemResource("/Users/hiseo/IdeaProjects/AwesomeHye/spring-batch-sample/src/main/resources/customer.csv"))
+                .fieldSetMapper(new BeanWrapperFieldSetMapper<>())
+                .targetType(Customer.class)
+                .linesToSkip(1)
+                .fixedLength()
+                .strict(false) // 토큰화 검증 안 함. year 자리수 달라도 마지막까지 잘 들고 온다.
+                .addColumns(new Range(1, 5))
+                .addColumns(new Range(7, 8))
+                .addColumns(new Range(10, 13))
+                .names("name", "age", "year")
+                .build();
+        }
 
-        DefaultLineMapper<Customer> defaultLineMapper = new DefaultLineMapper<>();
-        defaultLineMapper.setLineTokenizer(new DelimitedLineTokenizer());
-        defaultLineMapper.setFieldSetMapper(new CustomerFieldSetMapper());
 
-        itemReader.setLineMapper(defaultLineMapper);
-        itemReader.setLinesToSkip(1);
+        // 빌더 말고 직접 선언
+//        FlatFileItemReader<Customer> itemReader = new FlatFileItemReader<>();
+//        itemReader.setResource(new ClassPathResource("/customer.csv"));
+//
+//        DefaultLineMapper<Customer> defaultLineMapper = new DefaultLineMapper<>();
+//        defaultLineMapper.setLineTokenizer(new DelimitedLineTokenizer());
+//        defaultLineMapper.setFieldSetMapper(new CustomerFieldSetMapper());
+//
+//        itemReader.setLineMapper(defaultLineMapper);
+//        itemReader.setLinesToSkip(1);
 
-        return itemReader;
     }
 }
