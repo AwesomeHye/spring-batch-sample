@@ -42,6 +42,7 @@ import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.batch.item.file.transform.Range;
 import org.springframework.batch.item.support.ListItemReader;
+import org.springframework.batch.item.xml.builder.StaxEventItemReaderBuilder;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -49,9 +50,12 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.oxm.Unmarshaller;
+import org.springframework.oxm.xstream.XStreamMarshaller;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -343,7 +347,8 @@ public class HelloJobConfiguration {
     public Step step8() {
         return stepBuilderFactory.get("chunkStep8")
             .<Customer, Customer> chunk(5)
-            .reader(csvItemReader(false))
+            .reader(xmlItemReader())
+//            .reader(csvItemReader(false))
 //            .reader(csvItemReader(true))
             .writer((items) -> {
                 for (Customer item : items) {
@@ -383,7 +388,6 @@ public class HelloJobConfiguration {
                 .build();
         }
 
-
         // 빌더 말고 직접 선언
 //        FlatFileItemReader<Customer> itemReader = new FlatFileItemReader<>();
 //        itemReader.setResource(new ClassPathResource("/customer.csv"));
@@ -394,6 +398,31 @@ public class HelloJobConfiguration {
 //
 //        itemReader.setLineMapper(defaultLineMapper);
 //        itemReader.setLinesToSkip(1);
-
     }
+
+    @Bean
+    public ItemReader<Customer> xmlItemReader() {
+        return new StaxEventItemReaderBuilder<Customer>()
+            .name("xmlItemReader")
+            .resource(new ClassPathResource("/customer.xml"))
+            .addFragmentRootElements("customer") // 단위 기준이 될 태그
+            .unmarshaller(itemMarshaller()) // xml 을 객체로 바인딩
+            .build()
+            ;
+    }
+
+    public Unmarshaller itemMarshaller() {
+        Map<String, Class<?>> aliases = new HashMap<>();
+        aliases.put("customer", Customer.class); // 처음은 루트 element 가 되야함
+        aliases.put("id", Long.class);
+        aliases.put("name", String.class);
+        aliases.put("age", Integer.class);
+
+        XStreamMarshaller xStreamMarshaller = new XStreamMarshaller();
+        xStreamMarshaller.setAliases(aliases);
+
+        return xStreamMarshaller;
+    }
+
+
 }
