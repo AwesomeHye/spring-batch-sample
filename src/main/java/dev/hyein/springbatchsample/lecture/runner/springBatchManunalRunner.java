@@ -19,7 +19,7 @@ public class springBatchManunalRunner implements ApplicationRunner {
     private final JobLauncher jobLauncher;
     private final Job job;
 
-    public springBatchManunalRunner(JobLauncher jobLauncher, @Qualifier("chunkJob2") Job job) {
+    public springBatchManunalRunner(JobLauncher jobLauncher, @Qualifier("flatFileJob") Job job) {
         this.jobLauncher = jobLauncher;
         this.job = job;
     }
@@ -30,7 +30,7 @@ public class springBatchManunalRunner implements ApplicationRunner {
         JobParameters jobParamters = new JobParametersBuilder()
             .addString("name", "hyein")
             .addLong("seq", 9L)
-//            .addDate("date", new Date())
+            .addDate("date", new Date())
             .addDouble("weight", 16.5)
             .toJobParameters();
 

@@ -3,6 +3,8 @@ package dev.hyein.springbatchsample.lecture;
 import dev.hyein.springbatchsample.lecture.chunk.CustomItemProcessor;
 import dev.hyein.springbatchsample.lecture.chunk.CustomItemWriter;
 import dev.hyein.springbatchsample.lecture.chunk.Customer;
+import dev.hyein.springbatchsample.lecture.chunk.itemReader.CustomerFieldSetMapper;
+import dev.hyein.springbatchsample.lecture.chunk.itemReader.DefaultLineMapper;
 import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamReader;
 import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamWriter;
 import dev.hyein.springbatchsample.lecture.decider.CutomDecider;
@@ -33,12 +35,16 @@ import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
 import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.io.ClassPathResource;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -192,6 +198,12 @@ public class HelloJobConfiguration {
             .build();
     }
 
+    @Bean("flatFileJob")
+    public Job flatFileJob() {
+        return jobBuilderFactory.get("flatFileJob")
+            .start(step8())
+            .build();
+    }
 
     @Bean
     public JobExecutionDecider decider() {
@@ -321,5 +333,33 @@ public class HelloJobConfiguration {
             .start(step1())
             .next(step2(null))
             .end(); // end 써줘야 Flow 객체 생성됨
+    }
+
+    @Bean
+    public Step step8() {
+        return stepBuilderFactory.get("chunkStep8")
+            .<Customer, Customer> chunk(5)
+            .reader(csvItemReader())
+            .writer((items) -> {
+                for (Customer item : items) {
+                    log.info("Customer: {}", item.toString());
+                }
+            })
+            .build();
+    }
+
+    @Bean
+    public ItemReader<Customer> csvItemReader() {
+        FlatFileItemReader<Customer> itemReader = new FlatFileItemReader<>();
+        itemReader.setResource(new ClassPathResource("/customer.csv"));
+
+        DefaultLineMapper<Customer> defaultLineMapper = new DefaultLineMapper<>();
+        defaultLineMapper.setLineTokenizer(new DelimitedLineTokenizer());
+        defaultLineMapper.setFieldSetMapper(new CustomerFieldSetMapper());
+
+        itemReader.setLineMapper(defaultLineMapper);
+        itemReader.setLinesToSkip(1);
+
+        return itemReader;
     }
 }
