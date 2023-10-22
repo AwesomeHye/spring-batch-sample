@@ -38,11 +38,13 @@ import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.database.JdbcPagingItemReader;
+import org.springframework.batch.item.database.JpaPagingItemReader;
 import org.springframework.batch.item.database.Order;
 import org.springframework.batch.item.database.PagingQueryProvider;
 import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
 import org.springframework.batch.item.database.builder.JpaCursorItemReaderBuilder;
+import org.springframework.batch.item.database.builder.JpaPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
@@ -223,7 +225,7 @@ public class HelloJobConfiguration {
     }
 
     @Bean("flatFileJob")
-    public Job flatFileJob() {
+    public Job flatFileJob() throws Exception {
         return jobBuilderFactory.get("flatFileJob")
             .start(step8())
             .build();
@@ -362,11 +364,13 @@ public class HelloJobConfiguration {
 
 
     @Bean
-    public Step step8() {
+    public Step step8() throws Exception {
         return stepBuilderFactory.get("chunkStep8")
             .<Customer, Customer> chunk(5)
 
-            .reader(jpaCursorItemReader())
+            .reader(jpaPagingItemReader())
+//            .reader(jdbcPagingItemReader())
+//            .reader(jpaCursorItemReader())
 //            .reader(jdbcCursorItemReader())
 //            .reader(jsonItemReader())
 //            .reader(xmlItemReader())
@@ -508,7 +512,13 @@ public class HelloJobConfiguration {
 
 
     public ItemReader<Customer> jpaPagingItemReader() {
-        return null;
+        return new JpaPagingItemReaderBuilder<Customer>()
+            .name("jpaPagingItemReader")
+            .entityManagerFactory(entityManagerFactory)
+            .pageSize(5)
+            .queryString("select c from Customer c where c.name like :name") // Customer 는 @Entity 여야 한다.
+            .parameterValues(Collections.singletonMap("name", "%e%"))
+            .build();
     }
 
 }
