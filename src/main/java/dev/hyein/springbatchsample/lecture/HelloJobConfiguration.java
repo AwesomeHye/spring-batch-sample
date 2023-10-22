@@ -37,7 +37,13 @@ import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
+import org.springframework.batch.item.database.JdbcPagingItemReader;
+import org.springframework.batch.item.database.Order;
+import org.springframework.batch.item.database.PagingQueryProvider;
 import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
+import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
+import org.springframework.batch.item.database.builder.JpaCursorItemReaderBuilder;
+import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
@@ -49,6 +55,7 @@ import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.item.xml.builder.StaxEventItemReaderBuilder;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -57,9 +64,11 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.oxm.Unmarshaller;
 import org.springframework.oxm.xstream.XStreamMarshaller;
 
+import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -77,6 +86,7 @@ public class HelloJobConfiguration {
     private final Step5Tasklet step5Tasklet;
     private final JobExecutionListener jobExecutionListener;
     private final DataSource dataSource;
+    private final EntityManagerFactory entityManagerFactory;
 
     @Primary
     @Bean
@@ -356,7 +366,8 @@ public class HelloJobConfiguration {
         return stepBuilderFactory.get("chunkStep8")
             .<Customer, Customer> chunk(5)
 
-            .reader(jdbcCursorItemReader())
+            .reader(jpaCursorItemReader())
+//            .reader(jdbcCursorItemReader())
 //            .reader(jsonItemReader())
 //            .reader(xmlItemReader())
 //            .reader(csvItemReader(false))
@@ -457,13 +468,44 @@ public class HelloJobConfiguration {
             .build();
     }
 
-    public ItemReader<Customer> jdbcPagingItemReader() {
-        return null;
+    public ItemReader<Customer> jpaCursorItemReader() {
+        HashMap<String, Object> parameters = new HashMap<>();
+        parameters.put("name", "%e%");
+
+        return new JpaCursorItemReaderBuilder<Customer>()
+            .name("jpaCursorItemReader")
+            .entityManagerFactory(entityManagerFactory)
+            .queryString("select c from Customer c where name like :name order by age")
+            .parameterValues(parameters)
+            .build() // Customer 는 @Entity 여야 한다.
+            ;
     }
 
-    public ItemReader<Customer> jpaCursorItemReader() {
-        return null;
+
+    @Bean
+    public ItemReader<Customer> jdbcPagingItemReader() throws Exception {
+        return new JdbcPagingItemReaderBuilder<Customer>()
+            .name("jdbcPagingItemReader")
+            .dataSource(dataSource)
+            .pageSize(5) //chunksize 와 맞추기
+            .beanRowMapper(Customer.class)
+            .queryProvider(queryProvider())
+            .parameterValues(Collections.singletonMap("name", "%e%"))
+            .build();
     }
+
+    @Bean
+    public PagingQueryProvider queryProvider() throws Exception {
+        SqlPagingQueryProviderFactoryBean pagingQueryProviderFactory = new SqlPagingQueryProviderFactoryBean();
+        pagingQueryProviderFactory.setDataSource(dataSource);
+        pagingQueryProviderFactory.setSelectClause("id, name, age");
+        pagingQueryProviderFactory.setFromClause("from customer");
+        pagingQueryProviderFactory.setWhereClause("where name like :name");
+        pagingQueryProviderFactory.setSortKeys(Collections.singletonMap("id", Order.ASCENDING));
+
+        return pagingQueryProviderFactory.getObject();
+    }
+
 
     public ItemReader<Customer> jpaPagingItemReader() {
         return null;

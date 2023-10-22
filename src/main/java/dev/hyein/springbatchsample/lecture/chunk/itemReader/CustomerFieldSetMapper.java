@@ -14,6 +14,6 @@ public class CustomerFieldSetMapper implements FieldSetMapper<Customer> {
             return null;
         }
 
-        return new Customer(fieldSet.readString("name"), fieldSet.readInt("age"), fieldSet.readString("year"));
+        return new Customer(0L, fieldSet.readString("name"), fieldSet.readInt("age"), fieldSet.readString("year"));
     }
 }
