@@ -36,11 +36,15 @@ import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.database.JdbcCursorItemReader;
+import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
 import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.batch.item.file.transform.Range;
+import org.springframework.batch.item.json.JacksonJsonObjectReader;
+import org.springframework.batch.item.json.builder.JsonItemReaderBuilder;
 import org.springframework.batch.item.support.ListItemReader;
 import org.springframework.batch.item.xml.builder.StaxEventItemReaderBuilder;
 import org.springframework.batch.repeat.RepeatStatus;
@@ -343,11 +347,16 @@ public class HelloJobConfiguration {
             .end(); // end 써줘야 Flow 객체 생성됨
     }
 
+
+
     @Bean
     public Step step8() {
         return stepBuilderFactory.get("chunkStep8")
             .<Customer, Customer> chunk(5)
-            .reader(xmlItemReader())
+
+            .reader(jdbcCursorItemReader())
+//            .reader(jsonItemReader())
+//            .reader(xmlItemReader())
 //            .reader(csvItemReader(false))
 //            .reader(csvItemReader(true))
             .writer((items) -> {
@@ -357,6 +366,7 @@ public class HelloJobConfiguration {
             })
             .build();
     }
+
 
     public ItemReader<Customer> csvItemReader(boolean isDelimited) {
         if(isDelimited) {
@@ -424,5 +434,31 @@ public class HelloJobConfiguration {
         return xStreamMarshaller;
     }
 
+
+    @Bean
+    public ItemReader<Customer> jsonItemReader() {
+        return new JsonItemReaderBuilder<Customer>()
+            .name("jsonItemReader")
+            .jsonObjectReader(new JacksonJsonObjectReader<>(Customer.class))
+            .resource(new ClassPathResource("/customer.json"))
+            .build();
+    }
+
+    public ItemReader<Customer> jdbcCursorItemReader() {
+        return new JdbcCursorItemReaderBuilder()
+            .name("jdbcCursorItemReader")
+            .fetchSize(5)
+            .beanRowMapper(Customer.class)
+            .sql()
+    }
+
+    public ItemReader<Customer> jdbcPagingItemReader() {
+    }
+
+    public ItemReader<Customer> jpaCursorItemReader() {
+    }
+
+    public ItemReader<Customer> jpaPagingItemReader() {
+    }
 
 }

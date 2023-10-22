@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Bulbasaur",
+    "age": 10,
+    "year": 2021
+  },
+  {
+    "name": "Charmander",
+    "age": 20,
+    "year": 2022
+  },
+  {
+    "name": "Squirtle",
+    "age": 30,
+    "year": 2023
+  }
+]
