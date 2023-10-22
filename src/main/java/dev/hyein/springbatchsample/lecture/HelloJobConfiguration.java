@@ -57,6 +57,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.oxm.Unmarshaller;
 import org.springframework.oxm.xstream.XStreamMarshaller;
 
+import javax.sql.DataSource;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -75,6 +76,7 @@ public class HelloJobConfiguration {
     private final Step4Tasklet step4Tasklet;
     private final Step5Tasklet step5Tasklet;
     private final JobExecutionListener jobExecutionListener;
+    private final DataSource dataSource;
 
     @Primary
     @Bean
@@ -445,20 +447,26 @@ public class HelloJobConfiguration {
     }
 
     public ItemReader<Customer> jdbcCursorItemReader() {
-        return new JdbcCursorItemReaderBuilder()
+        return new JdbcCursorItemReaderBuilder<Customer>()
             .name("jdbcCursorItemReader")
-            .fetchSize(5)
+            .fetchSize(5) // chunksize 랑 맞춤
+            .dataSource(dataSource)
+            .sql("select * from customer where name like ? order by age")
+            .queryArguments("%e%")
             .beanRowMapper(Customer.class)
-            .sql()
+            .build();
     }
 
     public ItemReader<Customer> jdbcPagingItemReader() {
+        return null;
     }
 
     public ItemReader<Customer> jpaCursorItemReader() {
+        return null;
     }
 
     public ItemReader<Customer> jpaPagingItemReader() {
+        return null;
     }
 
 }
