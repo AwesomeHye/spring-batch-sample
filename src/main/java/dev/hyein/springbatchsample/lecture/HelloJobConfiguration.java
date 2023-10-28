@@ -1,5 +1,6 @@
 package dev.hyein.springbatchsample.lecture;
 
+import com.thoughtworks.xstream.mapper.ImmutableTypesMapper;
 import dev.hyein.springbatchsample.lecture.chunk.CustomItemProcessor;
 import dev.hyein.springbatchsample.lecture.chunk.CustomItemWriter;
 import dev.hyein.springbatchsample.lecture.chunk.Customer;
@@ -36,25 +37,38 @@ import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.database.JdbcPagingItemReader;
+import org.springframework.batch.item.database.JpaItemWriter;
 import org.springframework.batch.item.database.JpaPagingItemReader;
 import org.springframework.batch.item.database.Order;
 import org.springframework.batch.item.database.PagingQueryProvider;
+import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JdbcCursorItemReaderBuilder;
 import org.springframework.batch.item.database.builder.JdbcPagingItemReaderBuilder;
 import org.springframework.batch.item.database.builder.JpaCursorItemReaderBuilder;
+import org.springframework.batch.item.database.builder.JpaItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JpaPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
+import org.springframework.batch.item.file.builder.FlatFileItemWriterBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.batch.item.file.transform.Range;
+import org.springframework.batch.item.json.JacksonJsonObjectMarshaller;
 import org.springframework.batch.item.json.JacksonJsonObjectReader;
+import org.springframework.batch.item.json.JsonFileItemWriter;
+import org.springframework.batch.item.json.builder.JsonFileItemWriterBuilder;
 import org.springframework.batch.item.json.builder.JsonItemReaderBuilder;
 import org.springframework.batch.item.support.ListItemReader;
+import org.springframework.batch.item.xml.StaxEventItemWriter;
 import org.springframework.batch.item.xml.builder.StaxEventItemReaderBuilder;
+import org.springframework.batch.item.xml.builder.StaxEventItemWriterBuilder;
+import org.springframework.batch.jsr.item.ItemReaderAdapter;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
@@ -224,10 +238,17 @@ public class HelloJobConfiguration {
             .build();
     }
 
-    @Bean("flatFileJob")
-    public Job flatFileJob() throws Exception {
-        return jobBuilderFactory.get("flatFileJob")
+    @Bean("flatFileReaderJob")
+    public Job flatFileReaderJob() throws Exception {
+        return jobBuilderFactory.get("flatFileReaderJob")
             .start(step8())
+            .build();
+    }
+
+    @Bean("flatFileWriterJob")
+    public Job flatFileWriterJob() throws Exception {
+        return jobBuilderFactory.get("flatFileWriterJob")
+            .start(step9())
             .build();
     }
 
@@ -368,14 +389,14 @@ public class HelloJobConfiguration {
         return stepBuilderFactory.get("chunkStep8")
             .<Customer, Customer> chunk(5)
 
-            .reader(jpaPagingItemReader())
+//            .reader(jpaPagingItemReader())
 //            .reader(jdbcPagingItemReader())
 //            .reader(jpaCursorItemReader())
 //            .reader(jdbcCursorItemReader())
 //            .reader(jsonItemReader())
 //            .reader(xmlItemReader())
 //            .reader(csvItemReader(false))
-//            .reader(csvItemReader(true))
+            .reader(csvItemReader(true))
             .writer((items) -> {
                 for (Customer item : items) {
                     log.info("Customer: {}", item.toString());
@@ -486,7 +507,6 @@ public class HelloJobConfiguration {
     }
 
 
-    @Bean
     public ItemReader<Customer> jdbcPagingItemReader() throws Exception {
         return new JdbcPagingItemReaderBuilder<Customer>()
             .name("jdbcPagingItemReader")
@@ -498,7 +518,6 @@ public class HelloJobConfiguration {
             .build();
     }
 
-    @Bean
     public PagingQueryProvider queryProvider() throws Exception {
         SqlPagingQueryProviderFactoryBean pagingQueryProviderFactory = new SqlPagingQueryProviderFactoryBean();
         pagingQueryProviderFactory.setDataSource(dataSource);
@@ -521,4 +540,82 @@ public class HelloJobConfiguration {
             .build();
     }
 
+    @Bean
+    public Step step9() throws Exception {
+        return stepBuilderFactory.get("chunkStep9")
+            .<Customer, Customer> chunk(5)
+
+            .reader(new ListItemReader<Customer>(Arrays.asList(
+                new Customer(1L, "foo", 10, "2021"),
+                new Customer(2L, "bar", 20, "2022"),
+                new Customer(3L, "baz", 30, "2023"),
+                new Customer(4L, "qux", 40, "2024"),
+                new Customer(5L, "uux", 50, "2025")
+            )))
+            .writer(jpaItemWriter())
+//            .writer(jdbcBatchItemWriter())
+//            .writer(jsonFileWriter())
+//            .writer(xmlFileWriter())
+//            .writer(flatFileWriter())
+            .build();
+    }
+
+
+    private FlatFileItemWriter<Customer> flatFileWriter() {
+        return new FlatFileItemWriterBuilder<Customer>()
+            .name("flatFileWriter")
+            .resource(new FileSystemResource("/Users/hiseo/IdeaProjects/AwesomeHye/spring-batch-sample/src/main/resources/output_customer.txt"))
+//            .resource(new ClassPathResource("/customer.txt")) // 안먹힘
+//            .append(true) // 붙여쓰기
+            .shouldDeleteIfExists(true) // 파일 존재하면 삭제
+//            .delimited().delimiter("|") // 구분자 형식
+            .formatted().format("%-2d %-3s %-2d %-4s") // 고정 자리수 형식
+            .names("id", "name", "age", "year")
+            .build();
+    }
+
+    private StaxEventItemWriter<Customer> xmlFileWriter() {
+        XStreamMarshaller xStreamMarshaller = new XStreamMarshaller();
+        Map<String, Class<?>> aliases = new HashMap<>();
+        aliases.put("customer", Customer.class); // 처음은 루트 element 가 되야함
+        aliases.put("id", Long.class);
+        aliases.put("name", String.class);
+        aliases.put("age", Integer.class);
+        aliases.put("year", String.class);
+        xStreamMarshaller.setAliases(aliases);
+
+        return new StaxEventItemWriterBuilder<Customer>()
+            .name("xmlFileWriter")
+            .resource(new FileSystemResource("/Users/hiseo/IdeaProjects/AwesomeHye/spring-batch-sample/src/main/resources/output_customer.xml"))
+            .marshaller(xStreamMarshaller)
+            .rootTagName("customers") // root tag 명
+            .build();
+    }
+
+    private JsonFileItemWriter<Customer> jsonFileWriter() {
+        return new JsonFileItemWriterBuilder<Customer>()
+            .name("jsonFileWriter")
+            .resource(new FileSystemResource("/Users/hiseo/IdeaProjects/AwesomeHye/spring-batch-sample/src/main/resources/output_customer.json"))
+            .jsonObjectMarshaller(new JacksonJsonObjectMarshaller<>())
+            .build();
+    }
+
+
+    private JdbcBatchItemWriter<Customer> jdbcBatchItemWriter() {
+        // :id 같은 name parameter 안 먹혀서 insert 안 되고 NPE 남
+        return new JdbcBatchItemWriterBuilder<Customer>()
+            .dataSource(dataSource)
+            .sql("insert into output_customer values (:id, :name, :age, :year)")
+            .beanMapped()
+            .build();
+    }
+
+
+    private JpaItemWriter<Customer> jpaItemWriter() {
+        // javax.persistence.TransactionRequiredException: no transaction is in progress 에러 남
+        return new JpaItemWriterBuilder<Customer>()
+            .usePersist(true)
+            .entityManagerFactory(entityManagerFactory)
+            .build();
+    }
 }
