@@ -6,6 +6,7 @@ import dev.hyein.springbatchsample.lecture.chunk.CustomItemWriter;
 import dev.hyein.springbatchsample.lecture.chunk.Customer;
 import dev.hyein.springbatchsample.lecture.chunk.itemReader.CustomerFieldSetMapper;
 import dev.hyein.springbatchsample.lecture.chunk.itemReader.DefaultLineMapper;
+import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.ProcessorClassifier;
 import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamReader;
 import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamWriter;
 import dev.hyein.springbatchsample.lecture.decider.CutomDecider;
@@ -64,7 +65,10 @@ import org.springframework.batch.item.json.JacksonJsonObjectReader;
 import org.springframework.batch.item.json.JsonFileItemWriter;
 import org.springframework.batch.item.json.builder.JsonFileItemWriterBuilder;
 import org.springframework.batch.item.json.builder.JsonItemReaderBuilder;
+import org.springframework.batch.item.support.ClassifierCompositeItemProcessor;
+import org.springframework.batch.item.support.CompositeItemProcessor;
 import org.springframework.batch.item.support.ListItemReader;
+import org.springframework.batch.item.support.builder.CompositeItemProcessorBuilder;
 import org.springframework.batch.item.xml.StaxEventItemWriter;
 import org.springframework.batch.item.xml.builder.StaxEventItemReaderBuilder;
 import org.springframework.batch.item.xml.builder.StaxEventItemWriterBuilder;
@@ -86,6 +90,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -227,7 +232,8 @@ public class HelloJobConfiguration {
     @Bean("chunkJob")
     public Job chunkJob() {
         return jobBuilderFactory.get("chunkJob")
-            .start(step6())
+            .start(step5())
+//            .start(step6())
             .build();
     }
 
@@ -315,13 +321,29 @@ public class HelloJobConfiguration {
         return stepBuilderFactory.get("chunkStep5")
             .<String, String> chunk(3) // 데이터 10개 단위로 자름
             .reader(new ListItemReader<>(IntStream.rangeClosed(1, 5).boxed().map(Object::toString).collect(Collectors.toList())))
-            .processor((ItemProcessor<? super String, ? extends String>) item -> item + " processed")
+            .processor(getStringStringItemProcessor())
             .writer(items -> {
                 for (String item : items) {
                     log.info("chunk item: {}", item);
                 }
             })
             .build();
+    }
+
+    private static ItemProcessor<String, String> getStringStringItemProcessor() {
+        ProcessorClassifier<String, ItemProcessor<?, ? extends String>> classifier = new ProcessorClassifier<>();
+        Map<String, ItemProcessor<String, String>> processorMap = new HashMap<>();
+        processorMap.put("1", item -> item + " odd");
+        processorMap.put("2", item -> item + " even");
+        processorMap.put("3", item -> item + " odd");
+        processorMap.put("4", item -> item + " even");
+        processorMap.put("5", item -> item + " odd");
+        classifier.setProcessorMap(processorMap);
+
+        ClassifierCompositeItemProcessor<String, String> classifierCompositeItemProcessor = new ClassifierCompositeItemProcessor<>();
+        classifierCompositeItemProcessor.setClassifier(classifier);
+
+        return classifierCompositeItemProcessor;
     }
 
     @Bean
@@ -340,8 +362,14 @@ public class HelloJobConfiguration {
     }
 
     @Bean
-    public CustomItemProcessor itemProcessor() {
-        return new CustomItemProcessor();
+    public CompositeItemProcessor itemProcessor() {
+        List itemProcessors = new ArrayList<>();
+        itemProcessors.add(new CustomItemProcessor());
+
+        return new CompositeItemProcessorBuilder<>()
+            .delegates(itemProcessors)
+            .build()
+            ;
     }
 
     @Bean
