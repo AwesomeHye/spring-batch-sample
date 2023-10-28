@@ -73,7 +73,15 @@ import org.springframework.batch.item.xml.StaxEventItemWriter;
 import org.springframework.batch.item.xml.builder.StaxEventItemReaderBuilder;
 import org.springframework.batch.item.xml.builder.StaxEventItemWriterBuilder;
 import org.springframework.batch.jsr.item.ItemReaderAdapter;
+import org.springframework.batch.repeat.CompletionPolicy;
+import org.springframework.batch.repeat.RepeatCallback;
+import org.springframework.batch.repeat.RepeatContext;
 import org.springframework.batch.repeat.RepeatStatus;
+import org.springframework.batch.repeat.exception.SimpleLimitExceptionHandler;
+import org.springframework.batch.repeat.policy.CompositeCompletionPolicy;
+import org.springframework.batch.repeat.policy.SimpleCompletionPolicy;
+import org.springframework.batch.repeat.policy.TimeoutTerminationPolicy;
+import org.springframework.batch.repeat.support.RepeatTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.context.annotation.Bean;
@@ -83,6 +91,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.oxm.Unmarshaller;
 import org.springframework.oxm.xstream.XStreamMarshaller;
+import org.springframework.web.client.RestTemplate;
 
 import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
@@ -100,6 +109,7 @@ import java.util.stream.IntStream;
 @RequiredArgsConstructor
 @Slf4j
 public class HelloJobConfiguration {
+
     private final JobBuilderFactory jobBuilderFactory;
     private final StepBuilderFactory stepBuilderFactory;
     private final Step3Tasklet step3Tasklet;
@@ -319,7 +329,7 @@ public class HelloJobConfiguration {
     @Bean
     public Step step5() {
         return stepBuilderFactory.get("chunkStep5")
-            .<String, String> chunk(3) // 데이터 10개 단위로 자름
+            .<String, String>chunk(3) // 데이터 10개 단위로 자름
             .reader(new ListItemReader<>(IntStream.rangeClosed(1, 5).boxed().map(Object::toString).collect(Collectors.toList())))
             .processor(getStringStringItemProcessor())
             .writer(items -> {
@@ -349,7 +359,7 @@ public class HelloJobConfiguration {
     @Bean
     public Step step6() {
         return stepBuilderFactory.get("chunkStep6")
-            .<Customer, Customer> chunk(3)
+            .<Customer, Customer>chunk(3)
             .reader(itemReader())
             .processor(itemProcessor())
             .writer(itemWriter())
@@ -380,7 +390,7 @@ public class HelloJobConfiguration {
     @Bean
     public Step step7() {
         return stepBuilderFactory.get("chunkStep7")
-            .<String, String> chunk(3)
+            .<String, String>chunk(3)
             .reader(customItemStreamReader())
             .writer(customItemStreamWriter())
             .build();
@@ -411,11 +421,10 @@ public class HelloJobConfiguration {
     }
 
 
-
     @Bean
     public Step step8() throws Exception {
         return stepBuilderFactory.get("chunkStep8")
-            .<Customer, Customer> chunk(5)
+            .<Customer, Customer>chunk(5)
 
 //            .reader(jpaPagingItemReader())
 //            .reader(jdbcPagingItemReader())
@@ -435,7 +444,7 @@ public class HelloJobConfiguration {
 
 
     public ItemReader<Customer> csvItemReader(boolean isDelimited) {
-        if(isDelimited) {
+        if (isDelimited) {
             // 구분자
             return new FlatFileItemReaderBuilder<Customer>()
                 .name("flatFile") // FlatFileItemReader 이름
@@ -571,7 +580,7 @@ public class HelloJobConfiguration {
     @Bean
     public Step step9() throws Exception {
         return stepBuilderFactory.get("chunkStep9")
-            .<Customer, Customer> chunk(5)
+            .<Customer, Customer>chunk(5)
 
             .reader(new ListItemReader<Customer>(Arrays.asList(
                 new Customer(1L, "foo", 10, "2021"),
@@ -645,5 +654,72 @@ public class HelloJobConfiguration {
             .usePersist(true)
             .entityManagerFactory(entityManagerFactory)
             .build();
+    }
+
+    @Bean("repeatJob")
+    public Job repeatJob() throws Exception {
+        return jobBuilderFactory.get("repeatJob")
+            .start(step10())
+            .build();
+    }
+
+    @Bean
+    public Step step10() {
+        return stepBuilderFactory.get("chunkStep10")
+            .<String, String>chunk(3) // 데이터 3개 단위로 자름
+            .reader(new ListItemReader<>(IntStream.rangeClosed(1, 5).boxed().map(Object::toString).collect(Collectors.toList())))
+            .processor(new ItemProcessor<String, String>() {
+                RepeatTemplate repeatTemplate = new RepeatTemplate();
+
+
+                @Override
+                public String process(String item) throws Exception {
+
+                    // 원래 iterate() 무한 번 반복하는데 SimpleCompletionPolicy 에 의해 2번만 실행
+//                    repeatTemplate.setCompletionPolicy(new SimpleCompletionPolicy(2)); // iterate 반복 실행 횟수가 chunksize 보다 커지만 item 반환
+//                    repeatTemplate.setCompletionPolicy(new TimeoutTerminationPolicy(1000));
+
+                    // 복합 completion policy
+//                    CompositeCompletionPolicy compositeCompletionPolicy = new CompositeCompletionPolicy();
+//                    CompletionPolicy[] completionPolicies = new CompletionPolicy[]{
+//                        // 줄 중 빨리 끝나는거 기준으로 끝냄
+//                        new SimpleCompletionPolicy(2),
+//                        new TimeoutTerminationPolicy(1000)
+//                    };
+//                    compositeCompletionPolicy.setPolicies(completionPolicies);
+//                    repeatTemplate.setCompletionPolicy(compositeCompletionPolicy);
+
+                    // exception handler 테스트
+                    // 예외 3번 까지는 무시하고 4번째부터는 중단
+                    repeatTemplate.setExceptionHandler(simpleLimitExceptionHandler());
+
+                    repeatTemplate.iterate(new RepeatCallback() {
+                        @Override
+                        public RepeatStatus doInIteration(RepeatContext context) throws Exception {
+                            log.info("repeatTemplate test");
+                            if (1 == 1) {
+                                throw new RuntimeException("error");
+                            }
+                            return RepeatStatus.CONTINUABLE;
+                        }
+                    });
+
+                    // 반복 빠지면 아이템 하나 리턴
+                    return item;
+                }
+
+            })
+            .writer(items -> {
+                for (String item : items) {
+                    log.info("chunk item: {}", item);
+                }
+            })
+            .build();
+    }
+
+    @Bean
+    public SimpleLimitExceptionHandler simpleLimitExceptionHandler() {
+        // 빈으로 안 만들면 limit 가 iterate 호출될때마다 0으로 초기화됨
+        return new SimpleLimitExceptionHandler(5);
     }
 }
