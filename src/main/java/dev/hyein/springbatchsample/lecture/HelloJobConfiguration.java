@@ -39,6 +39,9 @@ import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
+import org.springframework.batch.item.NonTransientResourceException;
+import org.springframework.batch.item.ParseException;
+import org.springframework.batch.item.UnexpectedInputException;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.database.JdbcPagingItemReader;
@@ -722,4 +725,39 @@ public class HelloJobConfiguration {
         // 빈으로 안 만들면 limit 가 iterate 호출될때마다 0으로 초기화됨
         return new SimpleLimitExceptionHandler(5);
     }
+
+    @Bean("faultTolerantJob")
+    public Job faultTolerantJob() throws Exception {
+        return jobBuilderFactory.get("faultTolerantJob")
+            .start(step11())
+            .build();
+    }
+
+    @Bean
+    public Step step11() {
+        return stepBuilderFactory.get("chunkStep11")
+            .<String, String>chunk(4)
+            .reader(new ItemReader<String>() {
+                int i = 0;
+                @Override
+                public String read() throws Exception, UnexpectedInputException, ParseException, NonTransientResourceException {
+                    i++;
+                    if(i == 1)
+                        throw new IllegalArgumentException("skipped");
+                    return i > 3 ? null : "item" + i;
+                }
+            })
+            .writer(items -> {
+                for (String item : items) {
+                    log.info("chunk item: {}", item);
+                }
+            })
+            .faultTolerant() // faultTolerant 활성화
+            .skip(IllegalArgumentException.class) // IllegalArgumentException 발생시 skip
+            .skipLimit(2)
+            .retry(IllegalAccessError.class)
+            .retryLimit(2)
+            .build();
+    }
+
 }
