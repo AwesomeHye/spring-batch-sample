@@ -7,6 +7,9 @@ import dev.hyein.springbatchsample.lecture.chunk.Customer;
 import dev.hyein.springbatchsample.lecture.chunk.itemReader.CustomerFieldSetMapper;
 import dev.hyein.springbatchsample.lecture.chunk.itemReader.DefaultLineMapper;
 import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.ProcessorClassifier;
+import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.skip.SkipItemProcessor;
+import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.skip.SkipItemWriter;
+import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.skip.SkippableException;
 import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamReader;
 import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamWriter;
 import dev.hyein.springbatchsample.lecture.decider.CutomDecider;
@@ -36,6 +39,8 @@ import org.springframework.batch.core.job.flow.JobExecutionDecider;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
+import org.springframework.batch.core.step.skip.LimitCheckingItemSkipPolicy;
+import org.springframework.batch.core.step.skip.SkipPolicy;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
@@ -758,6 +763,57 @@ public class HelloJobConfiguration {
             .retry(IllegalAccessError.class)
             .retryLimit(2)
             .build();
+    }
+
+    @Bean("faultTolerantSkipJob")
+    public Job faultTolerantSkipJob() throws Exception {
+        return jobBuilderFactory.get("faultTolerantSkipJob")
+            .start(step12())
+            .build();
+    }
+
+
+    @Bean
+    public Step step12() {
+        return stepBuilderFactory.get("chunkStep12")
+            .<String, String> chunk(5)
+            .reader(new ItemReader<String>() {
+                int i = 0;
+                @Override
+                public String read() throws Exception, UnexpectedInputException, ParseException, NonTransientResourceException {
+                    i++;
+                    log.info("item: {}", i);
+                    if(i == 3)
+                        throw new SkippableException("skipped");
+                    return i > 20 ? null : String.valueOf(i); // null 이면 읽기 종료
+                }
+            })
+            .processor(skipItemProcessor())
+            .writer(skipItemWriter())
+            .faultTolerant()
+            // 아래 2개로 설정하거나 아님 .skipPolicy() 하나만 설정하거나
+            .skip(SkippableException.class)
+            .skipLimit(2) // reader, processor, writer 의 skip 모두 합한 값
+//            .skipPolicy(limitCheckingItemSkipPolicy())
+            .build();
+    }
+
+    @Bean
+    public ItemProcessor<? super String, String> skipItemProcessor() {
+        return new SkipItemProcessor();
+    }
+
+    @Bean
+    public ItemWriter<? super String> skipItemWriter() {
+        return new SkipItemWriter();
+    }
+
+    @Bean
+    public SkipPolicy limitCheckingItemSkipPolicy() {
+        Map<Class<? extends  Throwable>, Boolean> exceptionClass = new HashMap<>();
+        exceptionClass.put(SkippableException.class, true);
+
+        return new LimitCheckingItemSkipPolicy(3, exceptionClass);
     }
 
 }
