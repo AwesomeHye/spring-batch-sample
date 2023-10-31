@@ -19,7 +19,7 @@ public class springBatchManunalRunner implements ApplicationRunner {
     private final JobLauncher jobLauncher;
     private final Job job;
 
-    public springBatchManunalRunner(JobLauncher jobLauncher, @Qualifier("faultTolerantSkipJob") Job job) {
+    public springBatchManunalRunner(JobLauncher jobLauncher, @Qualifier("faultTolerantRetryJob") Job job) {
         this.jobLauncher = jobLauncher;
         this.job = job;
     }

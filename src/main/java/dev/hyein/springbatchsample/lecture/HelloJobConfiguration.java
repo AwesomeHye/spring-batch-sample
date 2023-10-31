@@ -7,6 +7,8 @@ import dev.hyein.springbatchsample.lecture.chunk.Customer;
 import dev.hyein.springbatchsample.lecture.chunk.itemReader.CustomerFieldSetMapper;
 import dev.hyein.springbatchsample.lecture.chunk.itemReader.DefaultLineMapper;
 import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.ProcessorClassifier;
+import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.retry.RetryItemProcessor;
+import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.retry.RetryableException;
 import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.skip.SkipItemProcessor;
 import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.skip.SkipItemWriter;
 import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.skip.SkippableException;
@@ -99,6 +101,8 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.oxm.Unmarshaller;
 import org.springframework.oxm.xstream.XStreamMarshaller;
+import org.springframework.retry.RetryPolicy;
+import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.web.client.RestTemplate;
 
 import javax.persistence.EntityManagerFactory;
@@ -816,4 +820,39 @@ public class HelloJobConfiguration {
         return new LimitCheckingItemSkipPolicy(3, exceptionClass);
     }
 
+    @Bean("faultTolerantRetryJob")
+    public Job faultTolerantRetryJob() throws Exception {
+        return jobBuilderFactory.get("faultTolerantRetryJob")
+            .start(step13())
+            .build();
+    }
+
+    @Bean
+    public Step step13() {
+        return stepBuilderFactory.get("chunkStep13")
+            .<String, String> chunk(5)
+            .reader(new ListItemReader<>(IntStream.rangeClosed(1, 5).boxed().map(Object::toString).collect(Collectors.toList())))
+            .processor(retryItemProcessor())
+            .writer(items -> System.out.println(items))
+            .faultTolerant()
+            .skip(RetryableException.class)
+            .skipLimit(2)
+//            .retry(RetryableException.class)
+//            .retryLimit(2) // retry 2번 시도
+            .retryPolicy(retryPolicy())
+            .build();
+    }
+
+    @Bean
+    public ItemProcessor<? super String, String> retryItemProcessor() {
+        return new RetryItemProcessor();
+    }
+
+    @Bean
+    public RetryPolicy retryPolicy() {
+        Map<Class<? extends Throwable>, Boolean> exceptionClass = new HashMap<>();
+        exceptionClass.put(RetryableException.class, true);
+
+        return new SimpleRetryPolicy(2, exceptionClass);
+    }
 }
