@@ -33,6 +33,9 @@ dependencies {
     // jpa
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 
+    // async
+    implementation group: 'org.springframework.batch', name: 'spring-batch-integration', version: '4.3.9'
+
     // lombok
     compileOnly 'org.projectlombok:lombok:1.18.2'
     annotationProcessor 'org.projectlombok:lombok:1.18.2'

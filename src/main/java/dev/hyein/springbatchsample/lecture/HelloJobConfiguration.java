@@ -1,13 +1,11 @@
 package dev.hyein.springbatchsample.lecture;
 
-import com.thoughtworks.xstream.mapper.ImmutableTypesMapper;
 import dev.hyein.springbatchsample.lecture.chunk.CustomItemProcessor;
 import dev.hyein.springbatchsample.lecture.chunk.CustomItemWriter;
 import dev.hyein.springbatchsample.lecture.chunk.Customer;
-import dev.hyein.springbatchsample.lecture.chunk.itemReader.CustomerFieldSetMapper;
-import dev.hyein.springbatchsample.lecture.chunk.itemReader.DefaultLineMapper;
 import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.ProcessorClassifier;
 import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.retry.RetryItemProcessor;
+import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.retry.RetryTemplateItemProcessor;
 import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.retry.RetryableException;
 import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.skip.SkipItemProcessor;
 import dev.hyein.springbatchsample.lecture.chunk.itemprocessor.skip.SkipItemWriter;
@@ -16,6 +14,7 @@ import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamRead
 import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamWriter;
 import dev.hyein.springbatchsample.lecture.decider.CutomDecider;
 import dev.hyein.springbatchsample.lecture.chunk.CustomItemReader;
+import dev.hyein.springbatchsample.lecture.listener.StopWatchJobListener;
 import dev.hyein.springbatchsample.lecture.tasklet.Step2Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step3Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step4Tasklet;
@@ -43,6 +42,8 @@ import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
 import org.springframework.batch.core.step.skip.LimitCheckingItemSkipPolicy;
 import org.springframework.batch.core.step.skip.SkipPolicy;
+import org.springframework.batch.integration.async.AsyncItemProcessor;
+import org.springframework.batch.integration.async.AsyncItemWriter;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
@@ -50,10 +51,7 @@ import org.springframework.batch.item.NonTransientResourceException;
 import org.springframework.batch.item.ParseException;
 import org.springframework.batch.item.UnexpectedInputException;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
-import org.springframework.batch.item.database.JdbcCursorItemReader;
-import org.springframework.batch.item.database.JdbcPagingItemReader;
 import org.springframework.batch.item.database.JpaItemWriter;
-import org.springframework.batch.item.database.JpaPagingItemReader;
 import org.springframework.batch.item.database.Order;
 import org.springframework.batch.item.database.PagingQueryProvider;
 import org.springframework.batch.item.database.builder.JdbcBatchItemWriterBuilder;
@@ -63,12 +61,10 @@ import org.springframework.batch.item.database.builder.JpaCursorItemReaderBuilde
 import org.springframework.batch.item.database.builder.JpaItemWriterBuilder;
 import org.springframework.batch.item.database.builder.JpaPagingItemReaderBuilder;
 import org.springframework.batch.item.database.support.SqlPagingQueryProviderFactoryBean;
-import org.springframework.batch.item.file.FlatFileItemReader;
 import org.springframework.batch.item.file.FlatFileItemWriter;
 import org.springframework.batch.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.batch.item.file.builder.FlatFileItemWriterBuilder;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
-import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.batch.item.file.transform.Range;
 import org.springframework.batch.item.json.JacksonJsonObjectMarshaller;
 import org.springframework.batch.item.json.JacksonJsonObjectReader;
@@ -82,28 +78,24 @@ import org.springframework.batch.item.support.builder.CompositeItemProcessorBuil
 import org.springframework.batch.item.xml.StaxEventItemWriter;
 import org.springframework.batch.item.xml.builder.StaxEventItemReaderBuilder;
 import org.springframework.batch.item.xml.builder.StaxEventItemWriterBuilder;
-import org.springframework.batch.jsr.item.ItemReaderAdapter;
-import org.springframework.batch.repeat.CompletionPolicy;
 import org.springframework.batch.repeat.RepeatCallback;
 import org.springframework.batch.repeat.RepeatContext;
 import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.batch.repeat.exception.SimpleLimitExceptionHandler;
-import org.springframework.batch.repeat.policy.CompositeCompletionPolicy;
-import org.springframework.batch.repeat.policy.SimpleCompletionPolicy;
-import org.springframework.batch.repeat.policy.TimeoutTerminationPolicy;
 import org.springframework.batch.repeat.support.RepeatTemplate;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.oxm.Unmarshaller;
 import org.springframework.oxm.xstream.XStreamMarshaller;
 import org.springframework.retry.RetryPolicy;
+import org.springframework.retry.backoff.FixedBackOffPolicy;
 import org.springframework.retry.policy.SimpleRetryPolicy;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.retry.support.RetryTemplate;
 
 import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
@@ -837,6 +829,7 @@ public class HelloJobConfiguration {
             .faultTolerant()
             .skip(RetryableException.class)
             .skipLimit(2)
+            // 밑에 주석한 2줄 이랑 .retryPolicy 랑 같은
 //            .retry(RetryableException.class)
 //            .retryLimit(2) // retry 2번 시도
             .retryPolicy(retryPolicy())
@@ -855,4 +848,99 @@ public class HelloJobConfiguration {
 
         return new SimpleRetryPolicy(2, exceptionClass);
     }
+
+
+    @Bean("retryTemplateJob")
+    public Job retryTemplateJob() throws Exception {
+        return jobBuilderFactory.get("retryTemplateJob")
+            .start(step14())
+            .build();
+    }
+
+    @Bean
+    public Step step14() {
+        return stepBuilderFactory.get("chunkStep14")
+            .<String, Customer> chunk(5)
+            .reader(new ListItemReader<>(IntStream.rangeClosed(1, 5).boxed().map(Object::toString).collect(Collectors.toList())))
+            .processor(retryTemplateItemProcessor())
+            .writer(items -> System.out.println(items))
+            .faultTolerant()
+            .build();
+    }
+    @Bean
+    public RetryTemplate retryTemplate() {
+        Map<Class<? extends Throwable>, Boolean> exceptionClass = new HashMap<>();
+        exceptionClass.put(RetryableException.class, true);
+
+        RetryTemplate retryTemplate = new RetryTemplate();
+
+        // 재시도 하기 까지 기다리는 시간
+        FixedBackOffPolicy fixedBackOffPolicy = new FixedBackOffPolicy();
+        fixedBackOffPolicy.setBackOffPeriod(2000); // ms
+
+        SimpleRetryPolicy simpleRetryPolicy = new SimpleRetryPolicy(2, exceptionClass);
+
+        retryTemplate.setRetryPolicy(simpleRetryPolicy);
+        retryTemplate.setBackOffPolicy(fixedBackOffPolicy);
+
+        return retryTemplate;
+    }
+
+    public ItemProcessor<String, Customer> retryTemplateItemProcessor() {
+        return new RetryTemplateItemProcessor(retryTemplate());
+    }
+
+    @Bean("asyncJob")
+    public Job asyncJob() throws Exception {
+        return jobBuilderFactory.get("asyncJob")
+            .start(step15())
+            .build();
+    }
+
+    @Bean
+    public Step step15() throws InterruptedException {
+        // 100 번 청크 실행 하기
+        return stepBuilderFactory.get("chunkStep14")
+            .<Customer, Customer> chunk(5)
+            .reader(jpaPagingItemReader())
+            .processor(asyncItemProcessor())
+            .writer(asyncItemWriter())
+//            .writer(jpaItemWriter())
+            .listener(new StopWatchJobListener())
+            .build();
+    }
+
+    @Bean
+    public ItemProcessor<Customer, Customer> syncItemProcessor() throws InterruptedException {
+
+
+        return new ItemProcessor<Customer, Customer>() {
+            @Override
+            public Customer process(Customer item) throws Exception {
+
+                // 비동기, 동기 성능 측정을 위해 sleep
+                Thread.sleep(5000);
+
+                return new Customer(item.getId(), item.getName().toUpperCase(), item.getAge(), item.getYear());
+            }
+        };
+    }
+
+    @Bean
+    public AsyncItemProcessor asyncItemProcessor() throws InterruptedException {
+
+        AsyncItemProcessor<Customer, Customer> asyncItemProcessor = new AsyncItemProcessor<>();
+        asyncItemProcessor.setDelegate(syncItemProcessor());
+        asyncItemProcessor.setTaskExecutor(new SimpleAsyncTaskExecutor());
+
+        return asyncItemProcessor;
+    }
+
+    @Bean
+    public AsyncItemWriter asyncItemWriter() {
+        AsyncItemWriter asyncItemWriter = new AsyncItemWriter();
+        asyncItemWriter.setDelegate(jdbcBatchItemWriter());
+        return asyncItemWriter;
+    }
+
 }
