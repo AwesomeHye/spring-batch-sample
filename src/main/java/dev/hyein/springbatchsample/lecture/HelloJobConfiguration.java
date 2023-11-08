@@ -14,7 +14,10 @@ import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamRead
 import dev.hyein.springbatchsample.lecture.chunk.itemstream.CustomItemStreamWriter;
 import dev.hyein.springbatchsample.lecture.decider.CutomDecider;
 import dev.hyein.springbatchsample.lecture.chunk.CustomItemReader;
-import dev.hyein.springbatchsample.lecture.listener.StopWatchJobListener;
+import dev.hyein.springbatchsample.lecture.listener.asyncItemWriter.StopWatchJobListener;
+import dev.hyein.springbatchsample.lecture.listener.multithreadstep.MultiThreadItemProcessorListener;
+import dev.hyein.springbatchsample.lecture.listener.multithreadstep.MultiThreadItemReadListener;
+import dev.hyein.springbatchsample.lecture.listener.multithreadstep.MultiThreadItemWriterListener;
 import dev.hyein.springbatchsample.lecture.tasklet.Step2Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step3Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step4Tasklet;
@@ -90,12 +93,14 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.task.SimpleAsyncTaskExecutor;
+import org.springframework.core.task.TaskExecutor;
 import org.springframework.oxm.Unmarshaller;
 import org.springframework.oxm.xstream.XStreamMarshaller;
 import org.springframework.retry.RetryPolicy;
 import org.springframework.retry.backoff.FixedBackOffPolicy;
 import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
 import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
@@ -893,14 +898,15 @@ public class HelloJobConfiguration {
     @Bean("asyncJob")
     public Job asyncJob() throws Exception {
         return jobBuilderFactory.get("asyncJob")
-            .start(step15())
+            .start(step16())
+//            .start(step15())
             .build();
     }
 
     @Bean
     public Step step15() throws InterruptedException {
         // 100 번 청크 실행 하기
-        return stepBuilderFactory.get("chunkStep14")
+        return stepBuilderFactory.get("chunkStep15")
             .<Customer, Customer> chunk(5)
             .reader(jpaPagingItemReader())
             .processor(asyncItemProcessor())
@@ -943,4 +949,28 @@ public class HelloJobConfiguration {
         return asyncItemWriter;
     }
 
+    @Bean
+    public Step step16() throws InterruptedException {
+        // 같은 스레드가 read-process-write 까지 데이터 물고 가는지 확인하기
+        return stepBuilderFactory.get("chunkStep16")
+            .<Customer, Customer> chunk(5)
+            .reader(jpaPagingItemReader())
+            .listener(new MultiThreadItemReadListener())
+            .processor((ItemProcessor<Customer, Customer>) item -> item )
+            .listener(new MultiThreadItemProcessorListener())
+            .writer(jpaItemWriter())
+            .listener(new MultiThreadItemWriterListener())
+            .taskExecutor(taskExecutor())
+            .build();
+    }
+
+    @Bean
+    public TaskExecutor taskExecutor() {
+        ThreadPoolTaskExecutor threadPoolTaskExecutor = new ThreadPoolTaskExecutor();
+        threadPoolTaskExecutor.setCorePoolSize(4);
+        threadPoolTaskExecutor.setMaxPoolSize(8); // 4개가 이미 작업 중일 때 최대 몇 개까지 스레드 생성 더 할 수 있는지
+        threadPoolTaskExecutor.setThreadNamePrefix("async-thread");
+
+        return threadPoolTaskExecutor;
+    }
 }
