@@ -27,21 +27,28 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobExecutionListener;
+import org.springframework.batch.core.JobInstance;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.core.StepExecutionListener;
+import org.springframework.batch.core.configuration.JobRegistry;
 import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.JobScope;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepScope;
+import org.springframework.batch.core.configuration.support.JobRegistryBeanPostProcessor;
+import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.job.DefaultJobParametersValidator;
+import org.springframework.batch.core.job.SimpleJob;
 import org.springframework.batch.core.job.builder.FlowBuilder;
 import org.springframework.batch.core.job.flow.Flow;
 import org.springframework.batch.core.job.flow.JobExecutionDecider;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.batch.core.launch.NoSuchJobException;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
 import org.springframework.batch.core.partition.support.Partitioner;
 import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
@@ -89,6 +96,7 @@ import org.springframework.batch.repeat.RepeatStatus;
 import org.springframework.batch.repeat.exception.SimpleLimitExceptionHandler;
 import org.springframework.batch.repeat.support.RepeatTemplate;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -104,6 +112,7 @@ import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import javax.batch.operations.JobOperator;
 import javax.persistence.EntityGraph;
 import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
@@ -113,6 +122,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -130,6 +140,10 @@ public class HelloJobConfiguration {
     private final JobExecutionListener jobExecutionListener;
     private final DataSource dataSource;
     private final EntityManagerFactory entityManagerFactory;
+    private final JobRegistry jobRegistry;
+    private final JobExplorer jobExplorer;
+    private final JobOperator jobOperator;
+
 
     @Primary
     @Bean
@@ -1011,5 +1025,38 @@ public class HelloJobConfiguration {
         return new ColumnRangePartitioner();
     }
 
+    @Bean
+    public BeanPostProcessor jobRegistryBeanPostProcessor() {
+        JobRegistryBeanPostProcessor jobRegistryBeanPostProcessor = new JobRegistryBeanPostProcessor();
+        jobRegistryBeanPostProcessor.setJobRegistry(jobRegistry);
+
+        return jobRegistryBeanPostProcessor;
+    }
+
+    //using
+    public void control() {
+        // job 실행
+        jobRegistry.getJobNames().forEach(name -> {
+            SimpleJob job = null;
+            try {
+                job = (SimpleJob) jobRegistry.getJob(name);
+            } catch (NoSuchJobException e) {
+                throw new RuntimeException(e);
+            }
+            log.info("jobName : {}", job.getName());
+            jobOperator.start(job.getName(), new Properties());
+        });
+
+        // job 중단
+        jobExplorer.findRunningJobExecutions("jobName").forEach(jobExecution -> {
+            // 바로 중단되는게 아니라 현재 실행중인 step 끝낸 이후에 중단됨
+            jobOperator.stop(jobExecution.getId());
+        });
+
+        // job restart
+        JobInstance lastJobInstance = jobExplorer.getLastJobInstance("jobName");
+        JobExecution lastJobExecution = jobExplorer.getLastJobExecution(lastJobInstance);
+        jobOperator.restart(lastJobExecution.getId(), new Properties());
+    }
 
 }
