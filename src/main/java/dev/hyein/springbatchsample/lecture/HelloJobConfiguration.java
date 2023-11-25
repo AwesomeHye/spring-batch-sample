@@ -1010,4 +1010,6 @@ public class HelloJobConfiguration {
         // gridSize 만큼 각각의 ExecutionContext 생성하는게 partitioner의 역할
         return new ColumnRangePartitioner();
     }
+
+
 }

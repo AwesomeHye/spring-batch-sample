@@ -39,6 +39,10 @@ dependencies {
     // lombok
     compileOnly 'org.projectlombok:lombok:1.18.2'
     annotationProcessor 'org.projectlombok:lombok:1.18.2'
+
+    // spring batch test
+    testImplementation group: 'org.springframework.batch', name: 'spring-batch-test', version: '4.3.9'
+
 }
 
 tasks.named('test') {
