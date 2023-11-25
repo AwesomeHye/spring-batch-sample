@@ -18,6 +18,7 @@ import dev.hyein.springbatchsample.lecture.listener.asyncItemWriter.StopWatchJob
 import dev.hyein.springbatchsample.lecture.listener.multithreadstep.MultiThreadItemProcessorListener;
 import dev.hyein.springbatchsample.lecture.listener.multithreadstep.MultiThreadItemReadListener;
 import dev.hyein.springbatchsample.lecture.listener.multithreadstep.MultiThreadItemWriterListener;
+import dev.hyein.springbatchsample.lecture.partition.ColumnRangePartitioner;
 import dev.hyein.springbatchsample.lecture.tasklet.Step2Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step3Tasklet;
 import dev.hyein.springbatchsample.lecture.tasklet.Step4Tasklet;
@@ -42,6 +43,7 @@ import org.springframework.batch.core.job.flow.Flow;
 import org.springframework.batch.core.job.flow.JobExecutionDecider;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.core.partition.support.Partitioner;
 import org.springframework.batch.core.step.job.DefaultJobParametersExtractor;
 import org.springframework.batch.core.step.skip.LimitCheckingItemSkipPolicy;
 import org.springframework.batch.core.step.skip.SkipPolicy;
@@ -102,6 +104,7 @@ import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import javax.persistence.EntityGraph;
 import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
 import java.util.ArrayList;
@@ -972,5 +975,39 @@ public class HelloJobConfiguration {
         threadPoolTaskExecutor.setThreadNamePrefix("async-thread");
 
         return threadPoolTaskExecutor;
+    }
+
+    // Partitioner
+    @Bean
+    public Job partitionerJob() {
+        return jobBuilderFactory.get("partitionerJob")
+            .start(masterStep())
+            .build();
+    }
+
+    @Bean
+    public Step masterStep() {
+        return stepBuilderFactory.get("masterStep")
+            .partitioner(slaveStep().getName(), partitioner())
+            .step(slaveStep())
+            .gridSize(4) // 4개 stepExecution 생성
+            .taskExecutor(new SimpleAsyncTaskExecutor())
+            .build();
+    }
+
+    @Bean
+    public Step slaveStep() {
+        return stepBuilderFactory.get("slaveStep")
+            .<String, String> chunk(2)
+            .reader(new ListItemReader<>(IntStream.rangeClosed(1, 9).boxed().map(Object::toString).collect(Collectors.toList())))
+            .writer(items -> log.info(items.toString()))
+            .build()
+            ;
+    }
+
+    @Bean
+    public Partitioner partitioner() {
+        // gridSize 만큼 각각의 ExecutionContext 생성하는게 partitioner의 역할
+        return new ColumnRangePartitioner();
     }
 }
